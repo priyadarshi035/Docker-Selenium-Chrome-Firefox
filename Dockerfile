@@ -1,17 +1,13 @@
 FROM selenium/node-base:3.141.59-iron
 LABEL authors=SeleniumHQ
 
+ARG MAVEN_VERSION=3.5.3
+ARG GRADLE_VERSION=5.2.1
+
 USER root
 
 #============================================
 # Google Chrome
-#============================================
-# can specify versions by CHROME_VERSION;
-#  e.g. google-chrome-stable=53.0.2785.101-1
-#       google-chrome-beta=53.0.2785.92-1
-#       google-chrome-unstable=54.0.2840.14-1
-#       latest (equivalent to google-chrome-stable)
-#       google-chrome-beta  (pull latest beta)
 #============================================
 ARG CHROME_VERSION="google-chrome-stable"
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
@@ -33,9 +29,6 @@ USER seluser
 #============================================
 # Chrome webdriver
 #============================================
-# can specify versions by CHROME_DRIVER_VERSION
-# Latest released version will be used by default
-#============================================
 ARG CHROME_DRIVER_VERSION="latest"
 RUN CD_VERSION=$(if [ ${CHROME_DRIVER_VERSION:-latest} = "latest" ]; then echo $(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE); else echo $CHROME_DRIVER_VERSION; fi) \
   && echo "Using chromedriver version: "$CD_VERSION \
@@ -49,21 +42,10 @@ RUN CD_VERSION=$(if [ ${CHROME_DRIVER_VERSION:-latest} = "latest" ]; then echo $
 
 COPY generate_config /opt/bin/generate_config
 
-# Generating a default config during build time
-#RUN /opt/bin/generate_config > /opt/selenium/config.json
-
-
-#############################################################################################################################
-#____________________________________________FireFox________________________________________________________________________
-#
-############################################################################################################################
-LABEL authors=SeleniumHQ
-
+#============================================
+# Mozilla Firefox
+#============================================
 USER root
-
-#=========
-# Firefox
-#=========
 ARG FIREFOX_VERSION=latest
 RUN FIREFOX_DOWNLOAD_URL=$(if [ $FIREFOX_VERSION = "latest" ] || [ $FIREFOX_VERSION = "nightly-latest" ] || [ $FIREFOX_VERSION = "devedition-latest" ]; then echo "https://download.mozilla.org/?product=firefox-$FIREFOX_VERSION-ssl&os=linux64&lang=en-US"; else echo "https://download-installer.cdn.mozilla.net/pub/firefox/releases/$FIREFOX_VERSION/linux-x86_64/en-US/firefox-$FIREFOX_VERSION.tar.bz2"; fi) \
   && apt-get update -qqy \
@@ -77,9 +59,9 @@ RUN FIREFOX_DOWNLOAD_URL=$(if [ $FIREFOX_VERSION = "latest" ] || [ $FIREFOX_VERS
   && mv /opt/firefox /opt/firefox-$FIREFOX_VERSION \
   && ln -fs /opt/firefox-$FIREFOX_VERSION/firefox /usr/bin/firefox
 
-#============
+#============================================
 # GeckoDriver
-#============
+#============================================
 ARG GECKODRIVER_VERSION=latest
 RUN GK_VERSION=$(if [ ${GECKODRIVER_VERSION:-latest} = "latest" ]; then echo "0.24.0"; else echo $GECKODRIVER_VERSION; fi) \
   && echo "Using GeckoDriver version: "$GK_VERSION \
@@ -93,28 +75,20 @@ RUN GK_VERSION=$(if [ ${GECKODRIVER_VERSION:-latest} = "latest" ]; then echo "0.
 
 USER seluser
 
-#COPY generate_config_firefox /opt/bin/generate_config_firefox
-
 # Generating a default config during build time
 RUN /opt/bin/generate_config > /opt/selenium/config.json
 
-#==========
+#===================================================================
 # Relaxing permissions for OpenShift and other non-sudo environments
-#==========
+#===================================================================
 RUN sudo chmod -R 777 ${HOME} \
 && sudo chgrp -R 0 ${HOME} \
 && sudo chmod -R g=u ${HOME}
 
-
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# NOTE: DO *NOT* EDIT THIS FILE.  
-# This Block is for Standalone Selenium Scripts
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#FROM selenium/node-chrome:3.141.59-iron
-#LABEL authors=SeleniumHQ
 USER root
-# Install OpenJDK-8
+#============================================
+#Java Installation 
+#============================================
 RUN apt-get update && \
     apt-get install -y openjdk-8-jdk && \
     apt-get install -y ant && \
@@ -131,12 +105,30 @@ ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
 RUN export JAVA_HOME
 RUN java -version
 
+#============================================
+#Python Installation
+#============================================
+RUN apt-get update && apt-get install -y python python-pip python-setuptools groff less libssl-dev libffi-dev python-dev build-essential git
+RUN python --version
 
+#============================================
+#Maven Installation
+#============================================
+ARG MAVEN_VERSION=3.5.3
+RUN cd /opt && wget http://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.zip && unzip apache-maven-${MAVEN_VERSION}-bin.zip
+ENV M2_HOME="/opt/apache-maven-${MAVEN_VERSION}"
+ENV PATH=${PATH}:${M2_HOME}/bin
+RUN mvn -v
+
+#============================================
+#Gradle Installation
+#============================================
+RUN cd /opt && wget https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip && unzip gradle-${GRADLE_VERSION}-bin.zip
+ENV PATH=$PATH:/opt/gradle-${GRADLE_VERSION}/bin
+RUN gradle -v
 
 USER seluser
 
-#====================================
-# Scripts to run Selenium Standalone
 #====================================
 COPY start-selenium-standalone.sh /opt/bin/start-selenium-standalone.sh
 
